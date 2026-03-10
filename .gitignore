@@ -38,6 +38,9 @@ yarn-error.*
 
 app-example
 
+# Instructor-only files (not for students)
+docs/instructor/
+
 # generated native folders
 /ios
 /android
