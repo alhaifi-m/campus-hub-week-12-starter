@@ -1,7 +1,9 @@
-// Week 9: Local Storage — MODIFIED (added persistence + view/edit mode)
+// Week 11: Camera + Maps — MODIFIED (added profile photo via expo-image-picker)
 import React, { useEffect, useState } from "react";
 import {
   ActivityIndicator,
+  Alert,
+  Image,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -9,6 +11,8 @@ import {
   TextInput,
   View,
 } from "react-native";
+import * as ImagePicker from "expo-image-picker";
+import { Ionicons } from "@expo/vector-icons";
 import { theme } from "../../../styles/theme";
 import * as storage from "../../../lib/storage";
 import { STORAGE_KEYS } from "../../../lib/storage";
@@ -29,19 +33,20 @@ type FormErrors = {
   phone?: string;
 };
 
-export default function Profile() {
+const Profile = () => {
   const [firstName, setFirstName] = useState("");
   const [lastName, setLastName] = useState("");
   const [email, setEmail] = useState("");
   const [studentId, setStudentId] = useState("");
   const [phone, setPhone] = useState("");
+  const [photoUri, setPhotoUri] = useState<string | null>(null); // ← Week 11: profile photo
 
   const [errors, setErrors] = useState<FormErrors>({});
   const [isLoading, setIsLoading] = useState(true);
   const [isEditing, setIsEditing] = useState(false);
   const [hasSavedData, setHasSavedData] = useState(false);
 
-  // Load saved profile data on mount
+  // Load saved profile data and photo on mount
   useEffect(() => {
     async function loadProfile() {
       const saved = await storage.get<ProfileData>(STORAGE_KEYS.PROFILE);
@@ -55,10 +60,77 @@ export default function Profile() {
       } else {
         setIsEditing(true);
       }
+
+      // Week 11: Load saved photo URI
+      const savedPhoto = await storage.get<string>(STORAGE_KEYS.PROFILE_PHOTO);
+      if (savedPhoto !== null) {
+        setPhotoUri(savedPhoto);
+      }
+
       setIsLoading(false);
     }
     loadProfile();
   }, []);
+
+  // ── Week 11: Photo picker ─────────────────────────────────
+
+  // Show an action sheet-style alert to choose camera or library
+  const handlePhotoPress = () => {
+    Alert.alert("Profile Photo", "Choose a source", [
+      { text: "Take Photo", onPress: () => openPicker("camera") },
+      { text: "Choose from Library", onPress: () => openPicker("library") },
+      { text: "Cancel", style: "cancel" },
+    ]);
+  };
+
+  const openPicker = async (source: "camera" | "library") => {
+    // Step 1: Request the appropriate permission
+    if (source === "camera") {
+      const { status } = await ImagePicker.requestCameraPermissionsAsync();
+      if (status !== "granted") {
+        Alert.alert(
+          "Permission Denied",
+          "Camera access is required to take a profile photo. Enable it in Settings."
+        );
+        return;
+      }
+    } else {
+      const { status } =
+        await ImagePicker.requestMediaLibraryPermissionsAsync();
+      if (status !== "granted") {
+        Alert.alert(
+          "Permission Denied",
+          "Photo library access is required to choose a profile photo. Enable it in Settings."
+        );
+        return;
+      }
+    }
+
+    // Step 2: Launch the picker
+    const result =
+      source === "camera"
+        ? await ImagePicker.launchCameraAsync({
+            mediaTypes: "images",
+            allowsEditing: true,
+            aspect: [1, 1], // square crop
+            quality: 0.8,
+          })
+        : await ImagePicker.launchImageLibraryAsync({
+            mediaTypes: "images",
+            allowsEditing: true,
+            aspect: [1, 1], // square crop
+            quality: 0.8,
+          });
+
+    // Step 3: Save the URI if the user didn't cancel
+    if (!result.canceled) {
+      const uri = result.assets[0].uri;
+      setPhotoUri(uri);
+      await storage.set(STORAGE_KEYS.PROFILE_PHOTO, uri);
+    }
+  };
+
+  // ── Form helpers (unchanged from Week 9) ─────────────────
 
   const isFormFilled =
     firstName.length > 0 &&
@@ -67,46 +139,34 @@ export default function Profile() {
     studentId.length > 0 &&
     phone.length > 0;
 
-  function validate() {
+  const validate = () => {
     const newErrors: FormErrors = {};
 
-    // First Name: required, min 2 characters
     if (firstName.trim().length < 2) {
       newErrors.firstName = "First name must be at least 2 characters.";
     }
-
-    // Last Name: required, min 2 characters
     if (lastName.trim().length < 2) {
       newErrors.lastName = "Last name must be at least 2 characters.";
     }
-
-    // Email: required, must match email format
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
     if (!emailRegex.test(email.trim())) {
       newErrors.email = "Please enter a valid email address.";
     }
-
-    // Student ID: required, exactly 9 characters (e.g., "A00123456")
     if (studentId.trim().length !== 9) {
       newErrors.studentId = "Student ID must be exactly 9 characters.";
     }
-
-    // Phone: required, at least 10 digits
     const digitsOnly = phone.replace(/\D/g, "");
     if (digitsOnly.length < 10) {
       newErrors.phone = "Phone number must have at least 10 digits.";
     }
 
     setErrors(newErrors);
-
-    // Return true if no errors
     return Object.keys(newErrors).length === 0;
-  }
+  };
 
-  async function handleSubmit() {
+  const handleSubmit = async () => {
     if (!validate()) return;
 
-    // Save profile data to storage
     const profileData: ProfileData = {
       firstName,
       lastName,
@@ -119,10 +179,9 @@ export default function Profile() {
     setErrors({});
     setHasSavedData(true);
     setIsEditing(false);
-  }
+  };
 
-  async function handleCancel() {
-    // Reload saved data to discard any edits
+  const handleCancel = async () => {
     const saved = await storage.get<ProfileData>(STORAGE_KEYS.PROFILE);
     if (saved !== null) {
       setFirstName(saved.firstName);
@@ -133,7 +192,32 @@ export default function Profile() {
     }
     setErrors({});
     setIsEditing(false);
-  }
+  };
+
+  // ── Shared avatar component (shown in both view and edit mode) ──
+
+  const renderAvatar = () => (
+    <View style={styles.avatarSection}>
+      <Pressable onPress={handlePhotoPress} style={styles.avatarContainer}>
+        {photoUri ? (
+          <Image source={{ uri: photoUri }} style={styles.avatar} />
+        ) : (
+          <View style={styles.avatarPlaceholder}>
+            <Ionicons name="person-outline" size={44} color={theme.colors.muted} />
+          </View>
+        )}
+        {/* Camera badge overlay */}
+        <View style={styles.cameraBadge}>
+          <Ionicons name="camera" size={14} color="#ffffff" />
+        </View>
+      </Pressable>
+      <Text style={styles.photoHint}>
+        {photoUri ? "Tap to change photo" : "Tap to add photo"}
+      </Text>
+    </View>
+  );
+
+  // ── Loading state ─────────────────────────────────────────
 
   if (isLoading) {
     return (
@@ -143,11 +227,14 @@ export default function Profile() {
     );
   }
 
-  // VIEW MODE — show saved profile data
+  // ── VIEW MODE ─────────────────────────────────────────────
+
   if (!isEditing) {
     return (
       <ScrollView style={styles.container} contentContainerStyle={styles.content}>
         <Text style={styles.h1}>My Profile</Text>
+
+        {renderAvatar()}
 
         <View style={styles.profileCard}>
           <View style={styles.profileRow}>
@@ -191,10 +278,13 @@ export default function Profile() {
     );
   }
 
-  // EDIT MODE — form with validation
+  // ── EDIT MODE ─────────────────────────────────────────────
+
   return (
     <ScrollView style={styles.container} contentContainerStyle={styles.content}>
       <Text style={styles.h1}>Edit Profile</Text>
+
+      {renderAvatar()}
 
       {/* First Name */}
       <Text style={styles.label}>First Name</Text>
@@ -285,7 +375,9 @@ export default function Profile() {
       )}
     </ScrollView>
   );
-}
+};
+
+export default Profile;
 
 const styles = StyleSheet.create({
   container: {
@@ -308,7 +400,51 @@ const styles = StyleSheet.create({
     color: theme.colors.text,
   },
 
-  // View mode styles
+  // ── Avatar styles (Week 11) ──────────────────────────────
+  avatarSection: {
+    alignItems: "center",
+    marginBottom: 24,
+  },
+  avatarContainer: {
+    position: "relative",
+  },
+  avatar: {
+    width: 100,
+    height: 100,
+    borderRadius: 50,
+    borderWidth: 3,
+    borderColor: theme.colors.border,
+  },
+  avatarPlaceholder: {
+    width: 100,
+    height: 100,
+    borderRadius: 50,
+    backgroundColor: theme.colors.card,
+    borderWidth: 2,
+    borderColor: theme.colors.border,
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  cameraBadge: {
+    position: "absolute",
+    bottom: 2,
+    right: 2,
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    backgroundColor: theme.colors.primary,
+    justifyContent: "center",
+    alignItems: "center",
+    borderWidth: 2,
+    borderColor: theme.colors.bg,
+  },
+  photoHint: {
+    marginTop: 8,
+    fontSize: 13,
+    color: theme.colors.muted,
+  },
+
+  // ── View mode styles (unchanged) ─────────────────────────
   profileCard: {
     backgroundColor: theme.colors.card,
     borderRadius: theme.radius.card,
@@ -334,7 +470,7 @@ const styles = StyleSheet.create({
     backgroundColor: theme.colors.border,
   },
 
-  // Edit mode styles
+  // ── Edit mode styles (unchanged) ─────────────────────────
   label: {
     fontSize: 14,
     fontWeight: "600",
@@ -360,7 +496,7 @@ const styles = StyleSheet.create({
     marginTop: 4,
   },
 
-  // Button styles
+  // ── Button styles (unchanged) ────────────────────────────
   button: {
     backgroundColor: theme.colors.primary,
     borderRadius: theme.radius.input,
