@@ -1,9 +1,9 @@
-// Week 11: Camera + Maps — MODIFIED (added profile photo via expo-image-picker)
+// Week 11: Camera + Maps — MODIFIED (added profile photo via expo-image-picker, built on Week 9 RHF + Zod)
 import React, { useEffect, useState } from "react";
 import {
   ActivityIndicator,
-  Alert,
-  Image,
+  Alert, // Week 11
+  Image, // Week 11
   Pressable,
   ScrollView,
   StyleSheet,
@@ -11,51 +11,63 @@ import {
   TextInput,
   View,
 } from "react-native";
-import * as ImagePicker from "expo-image-picker";
-import { Ionicons } from "@expo/vector-icons";
+import * as ImagePicker from "expo-image-picker"; // Week 11
+import { Ionicons } from "@expo/vector-icons"; // Week 11
+import { z } from "zod";
+import { zodResolver } from "@hookform/resolvers/zod";
+import { useForm, Controller } from "react-hook-form";
 import { theme } from "../../../styles/theme";
 import * as storage from "../../../lib/storage";
 import { STORAGE_KEYS } from "../../../lib/storage";
 
-type ProfileData = {
-  firstName: string;
-  lastName: string;
-  email: string;
-  studentId: string;
-  phone: string;
-};
+// Zod schema — unchanged from Week 8
+const profileSchema = z.object({
+  firstName: z.string().trim().min(2, "First name must be at least 2 characters."),
+  lastName:  z.string().trim().min(2, "Last name must be at least 2 characters."),
+  email:     z.string().trim().email("Please enter a valid email address."),
+  studentId: z.string().trim().length(9, "Student ID must be exactly 9 characters."),
+  phone:     z.string().refine(
+    (val) => val.replace(/\D/g, "").length >= 10,
+    "Phone number must have at least 10 digits."
+  ),
+});
 
-type FormErrors = {
-  firstName?: string;
-  lastName?: string;
-  email?: string;
-  studentId?: string;
-  phone?: string;
-};
+type ProfileForm = z.infer<typeof profileSchema>;
 
 const Profile = () => {
-  const [firstName, setFirstName] = useState("");
-  const [lastName, setLastName] = useState("");
-  const [email, setEmail] = useState("");
-  const [studentId, setStudentId] = useState("");
-  const [phone, setPhone] = useState("");
-  const [photoUri, setPhotoUri] = useState<string | null>(null); // ← Week 11: profile photo
-
-  const [errors, setErrors] = useState<FormErrors>({});
   const [isLoading, setIsLoading] = useState(true);
   const [isEditing, setIsEditing] = useState(false);
   const [hasSavedData, setHasSavedData] = useState(false);
+  const [photoUri, setPhotoUri] = useState<string | null>(null); // Week 11: profile photo
+
+  const {
+    control,
+    handleSubmit,
+    reset,
+    watch,
+    formState: { errors },
+  } = useForm<ProfileForm>({
+    resolver: zodResolver(profileSchema),
+    defaultValues: {
+      firstName: "",
+      lastName: "",
+      email: "",
+      studentId: "",
+      phone: "",
+    },
+    mode: "onSubmit",
+  });
+
+  // Track field values to enable/disable the Save button
+  const watchedValues = watch();
+  const isFormFilled = Object.values(watchedValues).every((v) => v.length > 0);
 
   // Load saved profile data and photo on mount
   useEffect(() => {
-    async function loadProfile() {
-      const saved = await storage.get<ProfileData>(STORAGE_KEYS.PROFILE);
+    const loadProfile = async () => {
+      const saved = await storage.get<ProfileForm>(STORAGE_KEYS.PROFILE);
       if (saved !== null) {
-        setFirstName(saved.firstName);
-        setLastName(saved.lastName);
-        setEmail(saved.email);
-        setStudentId(saved.studentId);
-        setPhone(saved.phone);
+        reset(saved);
         setHasSavedData(true);
       } else {
         setIsEditing(true);
@@ -68,7 +80,7 @@ const Profile = () => {
       }
 
       setIsLoading(false);
-    }
+    };
     loadProfile();
   }, []);
 
@@ -130,71 +142,24 @@ const Profile = () => {
     }
   };
 
-  // ── Form helpers (unchanged from Week 9) ─────────────────
+  // ── RHF submit + cancel ───────────────────────────────────
 
-  const isFormFilled =
-    firstName.length > 0 &&
-    lastName.length > 0 &&
-    email.length > 0 &&
-    studentId.length > 0 &&
-    phone.length > 0;
-
-  const validate = () => {
-    const newErrors: FormErrors = {};
-
-    if (firstName.trim().length < 2) {
-      newErrors.firstName = "First name must be at least 2 characters.";
-    }
-    if (lastName.trim().length < 2) {
-      newErrors.lastName = "Last name must be at least 2 characters.";
-    }
-    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    if (!emailRegex.test(email.trim())) {
-      newErrors.email = "Please enter a valid email address.";
-    }
-    if (studentId.trim().length !== 9) {
-      newErrors.studentId = "Student ID must be exactly 9 characters.";
-    }
-    const digitsOnly = phone.replace(/\D/g, "");
-    if (digitsOnly.length < 10) {
-      newErrors.phone = "Phone number must have at least 10 digits.";
-    }
-
-    setErrors(newErrors);
-    return Object.keys(newErrors).length === 0;
-  };
-
-  const handleSubmit = async () => {
-    if (!validate()) return;
-
-    const profileData: ProfileData = {
-      firstName,
-      lastName,
-      email,
-      studentId,
-      phone,
-    };
-    await storage.set(STORAGE_KEYS.PROFILE, profileData);
-
-    setErrors({});
+  // RHF calls this only after Zod validation passes
+  const onSubmit = async (data: ProfileForm) => {
+    await storage.set(STORAGE_KEYS.PROFILE, data);
     setHasSavedData(true);
     setIsEditing(false);
   };
 
   const handleCancel = async () => {
-    const saved = await storage.get<ProfileData>(STORAGE_KEYS.PROFILE);
+    const saved = await storage.get<ProfileForm>(STORAGE_KEYS.PROFILE);
     if (saved !== null) {
-      setFirstName(saved.firstName);
-      setLastName(saved.lastName);
-      setEmail(saved.email);
-      setStudentId(saved.studentId);
-      setPhone(saved.phone);
+      reset(saved);
     }
-    setErrors({});
     setIsEditing(false);
   };
 
-  // ── Shared avatar component (shown in both view and edit mode) ──
+  // ── Week 11: Avatar (shown in both view and edit mode) ──────
 
   const renderAvatar = () => (
     <View style={styles.avatarSection}>
@@ -230,44 +195,45 @@ const Profile = () => {
   // ── VIEW MODE ─────────────────────────────────────────────
 
   if (!isEditing) {
+    const values = watch();
     return (
       <ScrollView style={styles.container} contentContainerStyle={styles.content}>
         <Text style={styles.h1}>My Profile</Text>
 
-        {renderAvatar()}
+        {renderAvatar() /* Week 11 */}
 
         <View style={styles.profileCard}>
           <View style={styles.profileRow}>
             <Text style={styles.profileLabel}>First Name</Text>
-            <Text style={styles.profileValue}>{firstName}</Text>
+            <Text style={styles.profileValue}>{values.firstName}</Text>
           </View>
 
           <View style={styles.divider} />
 
           <View style={styles.profileRow}>
             <Text style={styles.profileLabel}>Last Name</Text>
-            <Text style={styles.profileValue}>{lastName}</Text>
+            <Text style={styles.profileValue}>{values.lastName}</Text>
           </View>
 
           <View style={styles.divider} />
 
           <View style={styles.profileRow}>
             <Text style={styles.profileLabel}>Email</Text>
-            <Text style={styles.profileValue}>{email}</Text>
+            <Text style={styles.profileValue}>{values.email}</Text>
           </View>
 
           <View style={styles.divider} />
 
           <View style={styles.profileRow}>
             <Text style={styles.profileLabel}>Student ID</Text>
-            <Text style={styles.profileValue}>{studentId}</Text>
+            <Text style={styles.profileValue}>{values.studentId}</Text>
           </View>
 
           <View style={styles.divider} />
 
           <View style={styles.profileRow}>
-            <Text style={styles.profileLabel}>Phone</Text>
-            <Text style={styles.profileValue}>{phone}</Text>
+            <Text style={styles.profileLabel}>Phone Number</Text>
+            <Text style={styles.profileValue}>{values.phone}</Text>
           </View>
         </View>
 
@@ -278,77 +244,115 @@ const Profile = () => {
     );
   }
 
-  // ── EDIT MODE ─────────────────────────────────────────────
+  // ── EDIT MODE — React Hook Form + Zod validation ──────────
 
   return (
     <ScrollView style={styles.container} contentContainerStyle={styles.content}>
       <Text style={styles.h1}>Edit Profile</Text>
 
-      {renderAvatar()}
+      {renderAvatar() /* Week 11 */}
 
       {/* First Name */}
       <Text style={styles.label}>First Name</Text>
-      <TextInput
-        style={[styles.input, errors.firstName && styles.inputError]}
-        placeholder="e.g. Jane"
-        placeholderTextColor={theme.colors.muted}
-        value={firstName}
-        onChangeText={setFirstName}
-        autoCapitalize="words"
+      <Controller
+        control={control}
+        name="firstName"
+        render={({ field: { onChange, value } }) => (
+          <TextInput
+            style={[styles.input, errors.firstName && styles.inputError]}
+            placeholder="e.g. Jane"
+            placeholderTextColor={theme.colors.muted}
+            value={value}
+            onChangeText={onChange}
+            autoCapitalize="words"
+          />
+        )}
       />
-      {errors.firstName && <Text style={styles.error}>{errors.firstName}</Text>}
+      {errors.firstName && (
+        <Text style={styles.error}>{errors.firstName.message}</Text>
+      )}
 
       {/* Last Name */}
       <Text style={styles.label}>Last Name</Text>
-      <TextInput
-        style={[styles.input, errors.lastName && styles.inputError]}
-        placeholder="e.g. Smith"
-        placeholderTextColor={theme.colors.muted}
-        value={lastName}
-        onChangeText={setLastName}
-        autoCapitalize="words"
+      <Controller
+        control={control}
+        name="lastName"
+        render={({ field: { onChange, value } }) => (
+          <TextInput
+            style={[styles.input, errors.lastName && styles.inputError]}
+            placeholder="e.g. Smith"
+            placeholderTextColor={theme.colors.muted}
+            value={value}
+            onChangeText={onChange}
+            autoCapitalize="words"
+          />
+        )}
       />
-      {errors.lastName && <Text style={styles.error}>{errors.lastName}</Text>}
+      {errors.lastName && (
+        <Text style={styles.error}>{errors.lastName.message}</Text>
+      )}
 
       {/* Email */}
       <Text style={styles.label}>Email</Text>
-      <TextInput
-        style={[styles.input, errors.email && styles.inputError]}
-        placeholder="e.g. jane.smith@edu.ca"
-        placeholderTextColor={theme.colors.muted}
-        value={email}
-        onChangeText={setEmail}
-        keyboardType="email-address"
-        autoCapitalize="none"
+      <Controller
+        control={control}
+        name="email"
+        render={({ field: { onChange, value } }) => (
+          <TextInput
+            style={[styles.input, errors.email && styles.inputError]}
+            placeholder="e.g. jane.smith@edu.ca"
+            placeholderTextColor={theme.colors.muted}
+            value={value}
+            onChangeText={onChange}
+            keyboardType="email-address"
+            autoCapitalize="none"
+          />
+        )}
       />
-      {errors.email && <Text style={styles.error}>{errors.email}</Text>}
+      {errors.email && (
+        <Text style={styles.error}>{errors.email.message}</Text>
+      )}
 
       {/* Student ID */}
       <Text style={styles.label}>Student ID</Text>
-      <TextInput
-        style={[styles.input, errors.studentId && styles.inputError]}
-        placeholder="e.g. A00123456"
-        placeholderTextColor={theme.colors.muted}
-        value={studentId}
-        onChangeText={setStudentId}
-        autoCapitalize="characters"
-        maxLength={9}
+      <Controller
+        control={control}
+        name="studentId"
+        render={({ field: { onChange, value } }) => (
+          <TextInput
+            style={[styles.input, errors.studentId && styles.inputError]}
+            placeholder="e.g. A00123456"
+            placeholderTextColor={theme.colors.muted}
+            value={value}
+            onChangeText={onChange}
+            autoCapitalize="characters"
+            maxLength={9}
+          />
+        )}
       />
       {errors.studentId && (
-        <Text style={styles.error}>{errors.studentId}</Text>
+        <Text style={styles.error}>{errors.studentId.message}</Text>
       )}
 
       {/* Phone Number */}
       <Text style={styles.label}>Phone Number</Text>
-      <TextInput
-        style={[styles.input, errors.phone && styles.inputError]}
-        placeholder="e.g. (403) 555-0123"
-        placeholderTextColor={theme.colors.muted}
-        value={phone}
-        onChangeText={setPhone}
-        keyboardType="phone-pad"
+      <Controller
+        control={control}
+        name="phone"
+        render={({ field: { onChange, value } }) => (
+          <TextInput
+            style={[styles.input, errors.phone && styles.inputError]}
+            placeholder="e.g. (403) 555-0123"
+            placeholderTextColor={theme.colors.muted}
+            value={value}
+            onChangeText={onChange}
+            keyboardType="phone-pad"
+          />
+        )}
       />
-      {errors.phone && <Text style={styles.error}>{errors.phone}</Text>}
+      {errors.phone && (
+        <Text style={styles.error}>{errors.phone.message}</Text>
+      )}
 
       {/* Buttons */}
       {hasSavedData ? (
@@ -358,7 +362,7 @@ const Profile = () => {
           </Pressable>
           <Pressable
             style={[styles.saveButton, !isFormFilled && styles.buttonDisabled]}
-            onPress={handleSubmit}
+            onPress={handleSubmit(onSubmit)}
             disabled={!isFormFilled}
           >
             <Text style={styles.buttonText}>Save Profile</Text>
@@ -367,7 +371,7 @@ const Profile = () => {
       ) : (
         <Pressable
           style={[styles.button, !isFormFilled && styles.buttonDisabled]}
-          onPress={handleSubmit}
+          onPress={handleSubmit(onSubmit)}
           disabled={!isFormFilled}
         >
           <Text style={styles.buttonText}>Save Profile</Text>
@@ -444,7 +448,7 @@ const styles = StyleSheet.create({
     color: theme.colors.muted,
   },
 
-  // ── View mode styles (unchanged) ─────────────────────────
+  // ── View mode styles ──────────────────────────────────────
   profileCard: {
     backgroundColor: theme.colors.card,
     borderRadius: theme.radius.card,
@@ -470,7 +474,7 @@ const styles = StyleSheet.create({
     backgroundColor: theme.colors.border,
   },
 
-  // ── Edit mode styles (unchanged) ─────────────────────────
+  // ── Edit mode styles ──────────────────────────────────────
   label: {
     fontSize: 14,
     fontWeight: "600",
@@ -496,7 +500,7 @@ const styles = StyleSheet.create({
     marginTop: 4,
   },
 
-  // ── Button styles (unchanged) ────────────────────────────
+  // ── Button styles ─────────────────────────────────────────
   button: {
     backgroundColor: theme.colors.primary,
     borderRadius: theme.radius.input,
