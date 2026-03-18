@@ -1,5 +1,6 @@
-// Week 11: Camera + Maps — NEW file (campus map with building markers + user location)
-import React, { useEffect, useState } from "react";
+// Week 11: Camera + Maps — NEW file (entire file is Week 11)
+// Campus map with SAIT building markers, user location, and interactive card navigation
+import React, { useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator,
   Pressable,
@@ -30,54 +31,56 @@ type Building = {
 
 const CAMPUS_BUILDINGS: Building[] = [
   {
-    id: "main",
-    title: "Main Building",
-    description: "Administration, Registrar, classrooms T100–T400",
-    coordinate: { latitude: 51.0642, longitude: -114.0878 },
+    id: "heritage",
+    title: "Heritage Hall",
+    description: "Administration, Registrar, student services",
+    coordinate: { latitude: 51.06635, longitude: -114.09225 },
   },
   {
-    id: "library",
-    title: "Library & Learning Commons",
-    description: "Study spaces, computer labs, printing services",
-    coordinate: { latitude: 51.0648, longitude: -114.0862 },
+    id: "johnware",
+    title: "John Ware Building",
+    description: "Business and IT programs, classrooms and labs",
+    coordinate: { latitude: 51.06705, longitude: -114.09155 },
   },
   {
-    id: "sciences",
-    title: "Sciences Building",
-    description: "Classrooms S100–S300, biology and chemistry labs",
-    coordinate: { latitude: 51.0635, longitude: -114.0895 },
+    id: "senator",
+    title: "Senator Burns Building",
+    description: "Trades and technology programs",
+    coordinate: { latitude: 51.06575, longitude: -114.09305 },
   },
   {
-    id: "recreation",
-    title: "Recreation Centre",
-    description: "Fitness centre, pool, gym courts, student locker rooms",
-    coordinate: { latitude: 51.0658, longitude: -114.0885 },
+    id: "stangrad",
+    title: "Stan Grad Centre",
+    description: "Student association, food court, student lounge",
+    coordinate: { latitude: 51.06655, longitude: -114.09085 },
   },
   {
-    id: "cafeteria",
-    title: "Student Hub & Cafeteria",
-    description: "Food court, student services, student association lounge",
-    coordinate: { latitude: 51.063, longitude: -114.087 },
+    id: "aldred",
+    title: "Aldred Centre",
+    description: "Health and public safety programs, simulation labs",
+    coordinate: { latitude: 51.06725, longitude: -114.09335 },
   },
   {
-    id: "parking",
-    title: "North Parking Lot",
-    description: "Student parking — Lot N1 and N2",
-    coordinate: { latitude: 51.0665, longitude: -114.0875 },
+    id: "athletics",
+    title: "Athletics & Recreation",
+    description: "Fitness centre, gym, climbing wall, student locker rooms",
+    coordinate: { latitude: 51.06595, longitude: -114.09415 },
   },
 ];
 
-// The initial map region — centered on campus, zoomed in enough to see all buildings
+// The initial map region — centered on SAIT's main campus (1301 16 Ave NW, Calgary)
 const CAMPUS_CENTER: Region = {
-  latitude: 51.0648,
-  longitude: -114.0878,
-  latitudeDelta: 0.008, // height of visible map area in degrees (~900m)
-  longitudeDelta: 0.008, // width of visible map area in degrees (~700m)
+  latitude: 51.0665,
+  longitude: -114.0922,
+  latitudeDelta: 0.006, // height of visible map area in degrees (~650m)
+  longitudeDelta: 0.006, // width of visible map area in degrees (~500m)
 };
 
 // ── Component ─────────────────────────────────────────────────
 
 const CampusMap = () => {
+  const mapRef = useRef<MapView>(null); // Week 11 — ref to call animateToRegion()
+  const markerRefs = useRef<Record<string, Marker | null>>({}); // Week 11 — ref to call showCallout() per marker
   const [locationGranted, setLocationGranted] = useState(false);
   const [locationError, setLocationError] = useState<string | null>(null);
   const [selectedBuilding, setSelectedBuilding] = useState<Building | null>(
@@ -89,6 +92,24 @@ const CampusMap = () => {
   useEffect(() => {
     requestLocation();
   }, []);
+
+  // Week 11 — animate map + show callout when a card or marker is tapped
+  const handleBuildingPress = (building: Building) => {
+    setSelectedBuilding(building);
+    mapRef.current?.animateToRegion(
+      {
+        latitude: building.coordinate.latitude,
+        longitude: building.coordinate.longitude,
+        latitudeDelta: 0.002,
+        longitudeDelta: 0.002,
+      },
+      500
+    );
+    // Show the native callout bubble after the animation settles
+    setTimeout(() => {
+      markerRefs.current[building.id]?.showCallout();
+    }, 600);
+  };
 
   const requestLocation = async () => {
     setIsLoadingLocation(true);
@@ -135,21 +156,33 @@ const CampusMap = () => {
       {/* ── Map ── */}
       <View style={styles.mapContainer}>
         <MapView
+          ref={mapRef}
           style={styles.map}
           initialRegion={CAMPUS_CENTER}
-          showsUserLocation={locationGranted} // blue dot for user's position
-          showsMyLocationButton={locationGranted} // button to re-center on user
+          showsUserLocation={locationGranted}
+          showsMyLocationButton={false}
         >
           {CAMPUS_BUILDINGS.map((building) => (
             <Marker
               key={building.id}
+              ref={(ref) => { markerRefs.current[building.id] = ref; }}
               coordinate={building.coordinate}
               title={building.title}
               description={building.description}
-              onPress={() => setSelectedBuilding(building)}
+              onPress={() => handleBuildingPress(building)}
             />
           ))}
         </MapView>
+
+        {/* Week 11 — custom recenter button replaces native showsMyLocationButton */}
+        <Pressable
+          style={styles.recenterBtn}
+          onPress={() =>
+            mapRef.current?.animateToRegion(CAMPUS_CENTER, 600)
+          }
+        >
+          <Ionicons name="locate" size={22} color={theme.colors.primary} />
+        </Pressable>
       </View>
 
       {/* ── Selected building detail card ── */}
@@ -181,7 +214,7 @@ const CampusMap = () => {
         {CAMPUS_BUILDINGS.map((building) => (
           <Pressable
             key={building.id}
-            onPress={() => setSelectedBuilding(building)}
+            onPress={() => handleBuildingPress(building)}
           >
             <AppCard
               title={building.title}
@@ -241,7 +274,7 @@ const styles = StyleSheet.create({
     color: theme.colors.muted,
   },
   mapContainer: {
-    height: 300,
+    height: 420,
     marginHorizontal: theme.spacing.screen,
     borderRadius: theme.radius.card,
     overflow: "hidden",
@@ -250,6 +283,16 @@ const styles = StyleSheet.create({
   },
   map: {
     flex: 1,
+  },
+  recenterBtn: {
+    position: "absolute",
+    bottom: 12,
+    right: 12,
+    backgroundColor: theme.colors.card,
+    borderRadius: 8,
+    padding: 8,
+    borderWidth: 1,
+    borderColor: theme.colors.border,
   },
   selectedCard: {
     marginHorizontal: theme.spacing.screen,

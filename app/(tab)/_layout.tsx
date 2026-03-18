@@ -31,6 +31,7 @@ const TabLayout = () => {
           ),
         }}
       />
+      {/* Week 11 — new Map tab */}
       <Tabs.Screen
         name="map"
         options={{

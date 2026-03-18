@@ -53,18 +53,19 @@ Settings tab
 Map tab  ← NEW (4th tab)
 ├── "Campus Map" title
 ├── Interactive map (zoom, pan, satellite view)
-│   ├── 6 building markers (tap to see name + description)
-│   └── Blue dot: user's current location (if permission granted)
-└── Building list (scrollable, tap to highlight on map)
-    ├── Main Building
-    ├── Library & Learning Commons
-    ├── Sciences Building
-    ├── Recreation Centre
-    ├── Student Hub & Cafeteria
-    └── North Parking Lot
+│   ├── 6 SAIT building markers (tap to see name + description)
+│   ├── Blue dot: user's current location (if permission granted)
+│   └── Recenter button (bottom-right) — animates back to SAIT campus
+└── Building list (scrollable, tap to animate map + show callout)
+    ├── Heritage Hall
+    ├── John Ware Building
+    ├── Senator Burns Building
+    ├── Stan Grad Centre
+    ├── Aldred Centre
+    └── Athletics & Recreation
 ```
 
-The profile screen now has a profile photo that persists across app restarts. The app has a 4th tab with a fully interactive campus map — students can find buildings, zoom in, and see their own location.
+The profile screen now has a profile photo that persists across app restarts. The app has a 4th tab with a fully interactive SAIT campus map — students can find buildings, tap building cards to fly the map to that location, and see their own position as a blue dot.
 
 ---
 
@@ -353,7 +354,121 @@ We always start with foreground. Background is much harder to get
 approved on the App Store and requires a strong justification.
 ```
 
-### 7. Native Modules — Why These Packages Need a Dev Build
+### 7. `useRef` — Direct References Without Re-renders
+
+Every concept introduced so far — `useState`, `useEffect` — works through React's data-driven model. You update state, React re-renders the component, and the UI reflects the new state. That covers almost everything.
+
+But there is one thing that data-driven rendering can't do cleanly: **call a method directly on a component instance**. For example: "animate the map to these coordinates right now." There's no prop for that — it's an imperative action, not a value.
+
+`useRef` is the escape hatch for exactly this situation.
+
+#### What is a ref?
+
+```ts
+const mapRef = useRef<MapView>(null);
+```
+
+`useRef` returns an object with a single property: `.current`. That's it. Whatever you put in `.current` stays there across renders — it's mutable — but **changing `.current` never triggers a re-render**.
+
+Think of it as a sticky note attached to the component. You can write anything on it, read it back, and React won't interfere.
+
+#### Two uses of useRef
+
+**Use 1 — Reference to a rendered component instance:**
+
+```tsx
+<MapView ref={mapRef} ... />
+```
+
+When you attach a `ref` to a component with the `ref` prop, React sets `mapRef.current` to the underlying component instance as soon as it renders. From that point on, you can call methods on it:
+
+```ts
+mapRef.current?.animateToRegion(CAMPUS_CENTER, 600);
+```
+
+`animateToRegion` is a method on the `MapView` instance — it's not a prop, not something you can trigger through state. The only way to call it is with a direct reference to the component. That's what the ref gives you.
+
+**Use 2 — Storing values that don't need to trigger re-renders:**
+
+```ts
+const markerRefs = useRef<Record<string, Marker | null>>({});
+```
+
+This stores a plain JavaScript object that maps building IDs to `Marker` instances. We never need the UI to re-render when this object changes — it's just a lookup table we maintain on the side. `useRef` is perfect for this. If we used `useState` instead, every time we assigned a marker ref, React would re-render the component unnecessarily.
+
+#### Why not useState for refs?
+
+```
+                useState                           useRef
+                ────────                           ──────
+Purpose:        values that affect the UI          values that don't affect the UI
+Changing it:    triggers a re-render               no re-render
+Accessed via:   the state variable directly        .current property
+Example use:    selectedBuilding, loading flag     mapRef, markerRefs, timers, counters
+```
+
+Trying to use `useState` to hold a `MapView` reference would break in two ways:
+1. Setting it would cause a re-render (and re-renders re-create component instances, potentially resetting the ref you just stored)
+2. It would make the component re-render every time a marker mounts — once per building × every render cycle
+
+#### How we use both refs in the map screen
+
+```ts
+const mapRef = useRef<MapView>(null);
+const markerRefs = useRef<Record<string, Marker | null>>({});
+```
+
+`mapRef` holds the single `MapView` so we can call `animateToRegion`:
+
+```tsx
+<MapView ref={mapRef} ... />
+
+// Later:
+mapRef.current?.animateToRegion({ latitude: ..., longitude: ..., latitudeDelta: 0.002, longitudeDelta: 0.002 }, 500);
+```
+
+`markerRefs` holds one ref per building so we can call `showCallout()` on a specific marker after the map animates:
+
+```tsx
+<Marker
+  ref={(ref) => { markerRefs.current[building.id] = ref; }}
+  ...
+/>
+
+// Later — show the callout bubble on that marker:
+markerRefs.current[building.id]?.showCallout();
+```
+
+#### The handleBuildingPress pattern
+
+These two refs power the `handleBuildingPress` function, which runs when a building card is tapped:
+
+```ts
+const handleBuildingPress = (building: Building) => {
+  setSelectedBuilding(building);              // 1. Update state → show detail card
+
+  mapRef.current?.animateToRegion(           // 2. Fly the map to this building
+    {
+      latitude: building.coordinate.latitude,
+      longitude: building.coordinate.longitude,
+      latitudeDelta: 0.002,                  //    tight zoom on just this building
+      longitudeDelta: 0.002,
+    },
+    500                                      //    500ms animation duration
+  );
+
+  setTimeout(() => {                         // 3. After the animation settles,
+    markerRefs.current[building.id]?.showCallout(); // show the native callout bubble
+  }, 600);
+};
+```
+
+Steps 2 and 3 are only possible because of `useRef`. There is no prop on `MapView` that says "animate to here." There is no prop on `Marker` that says "show your callout." These are imperative actions on component instances — the only way to trigger them is with a direct reference.
+
+**Key mental model:**
+> State answers the question "what should the UI look like?" Refs answer the question "I need to tell this specific component to *do something* right now."
+
+### 8. Native Modules — Why These Packages Need a Dev Build
 
 `expo-image-picker`, `expo-location`, and `react-native-maps` are **native modules** — they contain platform-specific code (Swift/Objective-C for iOS, Kotlin/Java for Android) that React Native calls from JavaScript.
 
@@ -708,57 +823,61 @@ type Building = {
 
 const CAMPUS_BUILDINGS: Building[] = [
   {
-    id: "main",
-    title: "Main Building",
-    description: "Administration, Registrar, classrooms T100–T400",
-    coordinate: { latitude: 51.0642, longitude: -114.0878 },
+    id: "heritage",
+    title: "Heritage Hall",
+    description: "Administration, Registrar, student services",
+    coordinate: { latitude: 51.06635, longitude: -114.09225 },
   },
   {
-    id: "library",
-    title: "Library & Learning Commons",
-    description: "Study spaces, computer labs, printing services",
-    coordinate: { latitude: 51.0648, longitude: -114.0862 },
+    id: "johnware",
+    title: "John Ware Building",
+    description: "Business and IT programs, classrooms and labs",
+    coordinate: { latitude: 51.06705, longitude: -114.09155 },
   },
   {
-    id: "sciences",
-    title: "Sciences Building",
-    description: "Classrooms S100–S300, biology and chemistry labs",
-    coordinate: { latitude: 51.0635, longitude: -114.0895 },
+    id: "senator",
+    title: "Senator Burns Building",
+    description: "Trades and technology programs",
+    coordinate: { latitude: 51.06575, longitude: -114.09305 },
   },
   {
-    id: "recreation",
-    title: "Recreation Centre",
-    description: "Fitness centre, pool, gym courts, student locker rooms",
-    coordinate: { latitude: 51.0658, longitude: -114.0885 },
+    id: "stangrad",
+    title: "Stan Grad Centre",
+    description: "Student association, food court, student lounge",
+    coordinate: { latitude: 51.06655, longitude: -114.09085 },
   },
   {
-    id: "cafeteria",
-    title: "Student Hub & Cafeteria",
-    description: "Food court, student services, student association lounge",
-    coordinate: { latitude: 51.0630, longitude: -114.0870 },
+    id: "aldred",
+    title: "Aldred Centre",
+    description: "Health and public safety programs, simulation labs",
+    coordinate: { latitude: 51.06725, longitude: -114.09335 },
   },
   {
-    id: "parking",
-    title: "North Parking Lot",
-    description: "Student parking — Lot N1 and N2",
-    coordinate: { latitude: 51.0665, longitude: -114.0875 },
+    id: "athletics",
+    title: "Athletics & Recreation",
+    description: "Fitness centre, gym, climbing wall, student locker rooms",
+    coordinate: { latitude: 51.06595, longitude: -114.09415 },
   },
 ];
 
-const CAMPUS_CENTER = {
-  latitude: 51.0648,
-  longitude: -114.0878,
-  latitudeDelta: 0.008,
-  longitudeDelta: 0.008,
+// Centered on SAIT's main campus — 1301 16 Ave NW, Calgary
+const CAMPUS_CENTER: Region = {
+  latitude: 51.0665,
+  longitude: -114.0922,
+  latitudeDelta: 0.006, // ~650m visible height — fits the SAIT campus
+  longitudeDelta: 0.006,
 };
 ```
 
 **Why define data outside the component?** This is the same reason `COURSES` was outside the component in early weeks — the data never changes, so there's no reason to re-create it on every render. It's not state; it's a constant.
 
-#### 5b. State and permission request
+#### 5b. Refs and state
 
 ```tsx
 const CampusMap = () => {
+  const mapRef = useRef<MapView>(null);
+  const markerRefs = useRef<Record<string, Marker | null>>({});
+
   const [locationGranted, setLocationGranted] = useState(false);
   const [locationError, setLocationError] = useState<string | null>(null);
   const [selectedBuilding, setSelectedBuilding] = useState<Building | null>(null);
@@ -767,6 +886,22 @@ const CampusMap = () => {
   useEffect(() => {
     requestLocation();
   }, []);
+
+  const handleBuildingPress = (building: Building) => {
+    setSelectedBuilding(building);
+    mapRef.current?.animateToRegion(
+      {
+        latitude: building.coordinate.latitude,
+        longitude: building.coordinate.longitude,
+        latitudeDelta: 0.002,
+        longitudeDelta: 0.002,
+      },
+      500
+    );
+    setTimeout(() => {
+      markerRefs.current[building.id]?.showCallout();
+    }, 600);
+  };
 
   const requestLocation = async () => {
     setIsLoadingLocation(true);
@@ -795,27 +930,48 @@ const CampusMap = () => {
 | `selectedBuilding` | `Building \| null` | The building whose detail card is shown below the map |
 | `isLoadingLocation` | `boolean` | Spinner while the permission check runs |
 
+**Refs (not state):**
+
+| Ref | Type | Purpose |
+|-----|------|---------|
+| `mapRef` | `MapView` | Lets us call `animateToRegion()` imperatively on the map |
+| `markerRefs` | `Record<string, Marker \| null>` | Lets us call `showCallout()` on a specific marker by building ID |
+
+See **Concept 7 — `useRef`** above for a full explanation of why these are refs and not state.
+
 **Why `locationError` is "soft"?** Unlike the API screens where an error means the screen can't show its content, a denied location permission just means the user doesn't see the blue dot. The map still renders. We show a gentle banner instead of a full-screen error.
 
 #### 5c. The MapView render
 
 ```tsx
-<MapView
-  style={styles.map}
-  initialRegion={CAMPUS_CENTER}
-  showsUserLocation={locationGranted}
-  showsMyLocationButton={locationGranted}
->
-  {CAMPUS_BUILDINGS.map((building) => (
-    <Marker
-      key={building.id}
-      coordinate={building.coordinate}
-      title={building.title}
-      description={building.description}
-      onPress={() => setSelectedBuilding(building)}
-    />
-  ))}
-</MapView>
+<View style={styles.mapContainer}>
+  <MapView
+    ref={mapRef}
+    style={styles.map}
+    initialRegion={CAMPUS_CENTER}
+    showsUserLocation={locationGranted}
+    showsMyLocationButton={false}
+  >
+    {CAMPUS_BUILDINGS.map((building) => (
+      <Marker
+        key={building.id}
+        ref={(ref) => { markerRefs.current[building.id] = ref; }}
+        coordinate={building.coordinate}
+        title={building.title}
+        description={building.description}
+        onPress={() => handleBuildingPress(building)}
+      />
+    ))}
+  </MapView>
+
+  {/* Custom recenter button — always returns to SAIT campus */}
+  <Pressable
+    style={styles.recenterBtn}
+    onPress={() => mapRef.current?.animateToRegion(CAMPUS_CENTER, 600)}
+  >
+    <Ionicons name="locate" size={22} color={theme.colors.primary} />
+  </Pressable>
+</View>
 ```
 
 **`initialRegion` vs `region`:**
@@ -824,7 +980,9 @@ const CampusMap = () => {
 
 We use `initialRegion` so the map starts centered on campus but lets the user explore freely.
 
-**`onPress` on Marker:** When the user taps a pin, `setSelectedBuilding(building)` updates state. The detail card below the map re-renders with that building's info. Tapping the close button sets `selectedBuilding` back to `null`, hiding the card.
+**`showsMyLocationButton={false}`:** The native location button that `react-native-maps` provides centers the map on the device's real GPS position. On an Android emulator this is set to the Googleplex by default, which is jarring. We replace it with a custom `recenterBtn` (bottom-right corner) that always animates back to `CAMPUS_CENTER` — which is always SAIT.
+
+**`onPress` on Marker:** Tapping a pin calls `handleBuildingPress`, which updates state, animates the map, and shows the callout bubble — all three happen from one tap.
 
 #### 5d. Building list below the map
 
@@ -834,7 +992,7 @@ We use `initialRegion` so the map starts centered on campus but lets the user ex
   {CAMPUS_BUILDINGS.map((building) => (
     <Pressable
       key={building.id}
-      onPress={() => setSelectedBuilding(building)}
+      onPress={() => handleBuildingPress(building)}
     >
       <AppCard
         title={building.title}
@@ -848,7 +1006,7 @@ We use `initialRegion` so the map starts centered on campus but lets the user ex
 </ScrollView>
 ```
 
-The list reuses `AppCard` — same component from Week 7. Each card is tappable and updates `selectedBuilding`, which shows the detail card below the map (and highlights the pin in the `MapView`).
+The list reuses `AppCard` — same component from Week 7. Each card calls `handleBuildingPress`, which does three things at once: updates the detail card below the map, animates the map to that building, and triggers the native callout bubble on the marker. Both the list cards and the map pins call the same function.
 
 ---
 
@@ -1006,41 +1164,15 @@ By default, `expo-image-picker` can record video (which needs a microphone). Set
 
 ### Part 2 — Map Interaction
 
-1. Open the Map tab. Confirm all 6 building markers appear.
-2. Tap a marker pin — the detail card should appear below the map.
-3. Tap the building name in the list below — the same detail card should appear.
+1. Open the Map tab. Confirm all 6 SAIT building markers appear.
+2. Tap a marker pin — the map should show the callout bubble and the detail card should appear below.
+3. Tap a building card in the list — the map should animate to that building and show its callout.
 4. Tap the ✕ on the detail card — it should disappear.
-5. Pinch to zoom in on a specific building. Try panning around campus.
+5. Pinch to zoom in on a specific building, then tap the recenter button (bottom-right) — the map should fly back to SAIT campus.
 
-### Part 3 — Bonus: Add a "Go to Campus" Button
+### Part 3 — Bonus: "Locate Me" Button
 
-Add a button on the map screen that resets the map view back to the campus center when tapped. This requires using a `ref` on `MapView`:
-
-```tsx
-import { useRef } from "react";
-import MapView from "react-native-maps";
-
-// Inside the component:
-const mapRef = useRef<MapView>(null);
-
-const goToCampus = () => {
-  mapRef.current?.animateToRegion(CAMPUS_CENTER, 500); // 500ms animation
-};
-
-// On MapView:
-<MapView ref={mapRef} ... >
-
-// Somewhere on screen:
-<Pressable onPress={goToCampus}>
-  <Text>Back to Campus</Text>
-</Pressable>
-```
-
-**What's a `ref`?** A `ref` is a way to hold a direct reference to a rendered component — in this case, the `MapView` instance. It's like grabbing the map component by name and calling a method on it (`animateToRegion`) directly. This is the escape hatch from React's data-driven model for cases where you need to imperatively control a component.
-
-### Part 4 — Double Bonus: "Locate Me" Button
-
-If the user grants location permission, add a "Locate Me" button that zooms the map to the user's current position using `Location.getCurrentPositionAsync()`:
+The recenter button always goes back to SAIT campus. Add a second button that zooms the map to the **user's actual GPS position** using `Location.getCurrentPositionAsync()`. This is useful on a real device where the user might have walked off campus:
 
 ```tsx
 const locateMe = async () => {

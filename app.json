@@ -10,10 +10,10 @@
     "newArchEnabled": true,
     "ios": {
       "supportsTablet": true,
-      "infoPlist": {
-        "NSCameraUsageDescription": "Campus Hub uses your camera so you can take a profile photo.",
-        "NSPhotoLibraryUsageDescription": "Campus Hub accesses your photo library so you can choose a profile photo.",
-        "NSLocationWhenInUseUsageDescription": "Campus Hub uses your location to show where you are on the campus map."
+      "infoPlist": { // add permission descriptions for iOS
+        "NSCameraUsageDescription": "Campus Hub uses your camera so you can take a profile photo.", // allow camera access for profile photo
+        "NSPhotoLibraryUsageDescription": "Campus Hub accesses your photo library so you can choose a profile photo.", // allow access to photo library for profile photo
+        "NSLocationWhenInUseUsageDescription": "Campus Hub uses your location to show where you are on the campus map." // allow access to location for campus map
       }
     },
     "android": {
@@ -26,11 +26,11 @@
       "edgeToEdgeEnabled": true,
       "predictiveBackGestureEnabled": false,
       "permissions": [
-        "android.permission.CAMERA",
-        "android.permission.READ_EXTERNAL_STORAGE",
-        "android.permission.READ_MEDIA_IMAGES",
-        "android.permission.ACCESS_FINE_LOCATION",
-        "android.permission.ACCESS_COARSE_LOCATION"
+        "android.permission.CAMERA", // allow camera access for profile photo
+        "android.permission.READ_EXTERNAL_STORAGE", // allow access to external storage
+        "android.permission.READ_MEDIA_IMAGES", // allow access to media images
+        "android.permission.ACCESS_FINE_LOCATION", // allow access to fine location
+        "android.permission.ACCESS_COARSE_LOCATION" // allow access to coarse location
       ]
     },
     "web": {
@@ -54,15 +54,15 @@
       [
         "expo-image-picker",
         {
-          "photosPermission": "Campus Hub accesses your photo library so you can choose a profile photo.",
-          "cameraPermission": "Campus Hub uses your camera so you can take a profile photo.",
+          "photosPermission": "Campus Hub accesses your photo library so you can choose a profile photo.", // allow access to photo library for profile photo
+          "cameraPermission": "Campus Hub uses your camera so you can take a profile photo.", // allow camera access for profile photo
           "microphonePermission": false
         }
       ],
       [
         "expo-location",
         {
-          "locationWhenInUsePermission": "Campus Hub uses your location to show where you are on the campus map."
+          "locationWhenInUsePermission": "Campus Hub uses your location to show where you are on the campus map." // allow access to location for campus map
         }
       ]
     ],
