@@ -80,7 +80,7 @@ const CAMPUS_CENTER: Region = {
 
 const CampusMap = () => {
   const mapRef = useRef<MapView>(null); // Week 11 — ref to call animateToRegion()
-  const markerRefs = useRef<Record<string, Marker | null>>({}); // Week 11 — ref to call showCallout() per marker
+  const markerRefs = useRef<Record<string, React.ComponentRef<typeof Marker> | null>>({}); // Week 11 — ref to call showCallout() per marker
   const [locationGranted, setLocationGranted] = useState(false);
   const [locationError, setLocationError] = useState<string | null>(null);
   const [selectedBuilding, setSelectedBuilding] = useState<Building | null>(
