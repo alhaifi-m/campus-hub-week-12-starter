@@ -107,6 +107,8 @@ const CampusMap = () => {
     );
     // Show the native callout bubble after the animation settles
     setTimeout(() => {
+      // showCallout() is a native MapView Marker method — it programmatically opens the info bubble above the pin
+      // The building.id key looks up the correct ref from markerRefs (populated via ref={(r) => ...} on each <Marker>), so the right callout opens for whichever building was tapped
       markerRefs.current[building.id]?.showCallout();
     }, 600);
   };
@@ -115,6 +117,7 @@ const CampusMap = () => {
     setIsLoadingLocation(true);
     setLocationError(null);
 
+    // Prompts the user with a system dialog to allow or deny access to their device location while the app is in use
     const { status } = await Location.requestForegroundPermissionsAsync();
 
     if (status === "granted") {
