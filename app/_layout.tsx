@@ -1,45 +1,24 @@
-// Week 12 - Starter
-// Root layout — the Stack is pre-built with login and signup screens registered.
-// Your job: add AuthProvider + AuthGuard to protect the tab routes.
+// Week 12: Supabase Auth — MODIFIED
+// Wraps the entire app in AuthProvider and adds AuthGuard for protected routes.
+//
+// AuthGuard pattern:
+//   - Watches session + current route segments
+//   - If no session + inside (tab) group → redirect to /login
+//   - If session exists + on login/signup → redirect to /(tab)/home
+//   This means every protected screen is automatically guarded — no manual
+//   checks needed in each tab screen.
 import { useEffect } from "react";
 import { Stack, useRouter, useSegments } from "expo-router";
 
-// Week 12 - Class Code ─────────────────────────────────────────────────────
-// TODO 1: import AuthProvider and useAuth
-// import { AuthProvider, useAuth } from "../context/AuthContext";
-// ──────────────────────────────────────────────────────────────────────────
+// Week 12 - Class Code: import AuthProvider and useAuth
 
-// Week 12 - Class Code ─────────────────────────────────────────────────────
-// TODO 2: Build the AuthGuard component here.
-//
-// const AuthGuard = ({ children }: { children: React.ReactNode }) => {
-//   const { session, isLoading } = useAuth();
-//   const segments = useSegments();   // e.g. ["(tab)", "home"] or ["login"]
-//   const router = useRouter();
-//
-//   useEffect(() => {
-//     if (isLoading) return;
-//     const inTabGroup = segments[0] === "(tab)";
-//     if (!session && inTabGroup) router.replace("/login");
-//     else if (session && !inTabGroup) router.replace("/(tab)/home");
-//   }, [session, isLoading, segments]);
-//
-//   if (isLoading) return null;
-//   return <>{children}</>;
-// };
-// ──────────────────────────────────────────────────────────────────────────
+// Week 12 - Class Code: add AuthGuard component here
 
-// ── Week 12 - Starter: Root layout ────────────────────────────────────────
+// ── Root Layout ───────────────────────────────────────────────────────────────
+
 const RootLayout = () => {
+  // Week 12 - Class Code: wrap Stack with AuthProvider and AuthGuard
   return (
-    // Week 12 - Class Code ─────────────────────────────────────────────────
-    // TODO 3: Wrap Stack with <AuthProvider> and <AuthGuard>
-    // <AuthProvider>
-    //   <AuthGuard>
-    //     <Stack ...>
-    //   </AuthGuard>
-    // </AuthProvider>
-    // ────────────────────────────────────────────────────────────────────────
     <Stack screenOptions={{ headerShown: false }}>
       <Stack.Screen name="(tab)" />
       <Stack.Screen name="login" />
