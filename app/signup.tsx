@@ -19,7 +19,7 @@ import { z } from "zod";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useForm, Controller } from "react-hook-form";
 import { Ionicons } from "@expo/vector-icons";
-// Week 12 - Class Code: import useAuth
+import { useAuth } from "@/context/AuthContext";
 import { theme } from "../styles/theme";
 
 // ── Validation schema ─────────────────────────────────────────────────────────
@@ -48,7 +48,7 @@ type SignUpForm = z.infer<typeof signUpSchema>;
 // ── Component ─────────────────────────────────────────────────────────────────
 
 const SignUp = () => {
-  // Week 12 - Class Code: get signUp from useAuth
+  const { signUp } = useAuth();
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [authError, setAuthError] = useState<string | null>(null);
   const [emailSent, setEmailSent] = useState(false); // shown if email confirmation is required
@@ -67,7 +67,7 @@ const SignUp = () => {
     try {
       setAuthError(null);
       setIsSubmitting(true);
-      // Week 12 - Class Code: call signUp
+      await signUp(data.email, data.password);
       // Two possible outcomes:
       //   A) Supabase "Confirm email" disabled → session set immediately → AuthGuard redirects
       //   B) Supabase "Confirm email" enabled  → no session yet → show success screen

@@ -7,10 +7,31 @@
 //   - If session exists + on login/signup → redirect to /(tab)/home
 //   This means every protected screen is automatically guarded — no manual
 //   checks needed in each tab screen.
-import React, { useEffect } from "react";
+import React, { Children, useEffect } from "react";
 import { Stack, useRouter, useSegments } from "expo-router";
+import { AuthProvider, useAuth } from "@/context/AuthContext";
 
 // Week 12 - Class Code: import AuthProvider and useAuth
+
+const AuthGuard = ({ children }: { children: React.ReactNode }) => {
+  const { session, isLoading } = useAuth();
+  const segments = useSegments();
+  // ['(tab)', 'home'] for /(tab)/home
+  const router = useRouter();
+
+  useEffect(() => {
+    const inTabGroup = segments[0] === "(tab)";
+    if (!session && inTabGroup) {
+      router.replace("/login");
+    } else if (session && !inTabGroup) {
+      router.replace("/(tab)/home");
+    }
+  }, [session, segments, isLoading]);
+
+  if (isLoading) return null;
+
+  return <>{children}</>;
+};
 
 // Week 12 - Class Code: add AuthGuard component here
 
@@ -19,11 +40,15 @@ import { Stack, useRouter, useSegments } from "expo-router";
 const RootLayout = () => {
   // Week 12 - Class Code: wrap Stack with AuthProvider and AuthGuard
   return (
-    <Stack screenOptions={{ headerShown: false }}>
-      <Stack.Screen name="(tab)" />
-      <Stack.Screen name="login" />
-      <Stack.Screen name="signup" />
-    </Stack>
+    <AuthProvider>
+      <AuthGuard>
+        <Stack screenOptions={{ headerShown: false }}>
+          <Stack.Screen name="(tab)" />
+          <Stack.Screen name="login" />
+          <Stack.Screen name="signup" />
+        </Stack>
+      </AuthGuard>
+    </AuthProvider>
   );
 };
 

@@ -5,12 +5,23 @@
 import React from "react";
 import { ActivityIndicator, StyleSheet, View } from "react-native";
 import { Redirect } from "expo-router";
+import { useAuth } from "@/context/AuthContext";
 // Week 12 - Class Code: import useAuth
 import { theme } from "../styles/theme";
 
 const Index = () => {
+  const { session, isLoading } = useAuth();
+
+  if(isLoading){
+    return (
+      <View style={styles.centered}>
+        <ActivityIndicator size="large" color={theme.colors.primary} />
+      </View>
+    )
+  }
+
   // Week 12 - Class Code: replace this with session check + spinner + conditional redirect
-  return <Redirect href="/(tab)/home" />;
+  return <Redirect href={ session ? "/(tab)/home" : "/login" } />;
 };
 
 export default Index;

@@ -19,7 +19,7 @@ import { z } from "zod";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useForm, Controller } from "react-hook-form";
 import { Ionicons } from "@expo/vector-icons";
-// Week 12 - Class Code: import useAuth
+import { useAuth } from "@/context/AuthContext";
 import { theme } from "../styles/theme";
 
 // ── Validation schema ─────────────────────────────────────────────────────────
@@ -34,7 +34,7 @@ type LoginForm = z.infer<typeof loginSchema>;
 // ── Component ─────────────────────────────────────────────────────────────────
 
 const Login = () => {
-  // Week 12 - Class Code: get signIn from useAuth
+  const { signIn } = useAuth();
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [authError, setAuthError] = useState<string | null>(null);
 
@@ -52,7 +52,7 @@ const Login = () => {
     try {
       setAuthError(null);
       setIsSubmitting(true);
-      // Week 12 - Class Code: call signIn
+      await signIn(data.email, data.password);
     } catch (e) {
       setAuthError(
         e instanceof Error ? e.message : "Sign in failed. Please try again."

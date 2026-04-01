@@ -15,10 +15,12 @@ import AppCard from "../../../components/AppCard";
 import { theme } from "../../../styles/theme";
 import * as storage from "../../../lib/storage";
 import { STORAGE_KEYS } from "../../../lib/storage";
+import { useAuth } from "@/context/AuthContext";
 
 // Week 12 - Class Code: import useAuth
 
 const Settings = () => {
+  const{ signOut } = useAuth();
   const [notifications, setNotifications] = useState(true);
   const [isLoading, setIsLoading] = useState(true);
   // Week 12 - Class Code: get signOut from useAuth
@@ -41,7 +43,9 @@ const Settings = () => {
     await storage.set(STORAGE_KEYS.NOTIFICATIONS, value);
   };
 
-  // Week 12 - Class Code: handleSignOut
+const handleSignOut = async () => {
+  await signOut();
+}
 
   if (isLoading) {
     return (
@@ -77,7 +81,19 @@ const Settings = () => {
         />
       </Pressable>
 
-      {/* Week 12 - Class Code: Sign Out card */}
+      <Pressable onPress={handleSignOut}>
+        <AppCard
+          title="Sign Out"
+          subtitle="Log out of your account"
+          right={
+            <Ionicons
+              name="log-out-outline"
+              size={20}
+              color={theme.colors.error}
+            />
+          }
+        />
+        </Pressable>
     </View>
   );
 };
