@@ -7,7 +7,7 @@
 //   - If session exists + on login/signup → redirect to /(tab)/home
 //   This means every protected screen is automatically guarded — no manual
 //   checks needed in each tab screen.
-import { useEffect } from "react";
+import React, { useEffect } from "react";
 import { Stack, useRouter, useSegments } from "expo-router";
 
 // Week 12 - Class Code: import AuthProvider and useAuth

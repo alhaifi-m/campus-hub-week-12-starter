@@ -1,4 +1,5 @@
 // Week 11: Camera + Maps — MODIFIED (added 4th tab: Campus Map)
+import React from "react";
 import { Tabs } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 

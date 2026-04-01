@@ -138,7 +138,7 @@ export default function CourseDetails() {
       {/* Announcements */}
       <Text style={styles.sectionTitle}>Announcements</Text>
 
-      {course?.announcements.map((text, index) => (
+      {course?.announcements.map((text: string, index: number) => (
         <AppCard
           key={index}
           title={text}
