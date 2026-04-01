@@ -16,6 +16,7 @@
 import React, { createContext, useContext, useEffect, useState } from "react";
 import type { Session, User } from "@supabase/supabase-js";
 import { supabase } from "../lib/supabase";
+import { email } from "zod";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -36,11 +37,42 @@ const AuthContext = createContext<AuthContextType | null>(null);
 
 export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   // Week 12 - Class Code: replace these placeholders with real state + effects
-  const session = null as Session | null;
-  const isLoading = false;
-  const signIn = async (_email: string, _password: string) => {};
-  const signUp = async (_email: string, _password: string) => {};
-  const signOut = async () => {};
+  const [session, setSession] = useState<Session | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+
+  useEffect(() => {
+    // 1. Check if there's an active session on mount
+    // 2. Listen for auth state changes and update session accordingly
+    supabase.auth.getSession()
+      .then(({data : {session}})=>{
+        setSession(session);
+      })
+      .finally(()=>{
+        setIsLoading(false);
+      })
+
+      const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+        setSession(session);
+      });
+      
+    // Cleanup subscription on unmount
+    return () => subscription.unsubscribe()
+  }, []);
+
+  const signIn = async (email: string, password: string) => {
+    const { error } = await supabase.auth.signInWithPassword({ email, password });
+    if (error) throw error;
+  }
+
+  const signUp = async (email: string, password: string) => {
+    const { error } = await supabase.auth.signUp({ email, password });
+    if (error) throw error;
+  }
+
+  const signOut = async () => {
+    const { error } = await supabase.auth.signOut();
+    if (error) throw error;
+  }
 
   return (
     <AuthContext.Provider
